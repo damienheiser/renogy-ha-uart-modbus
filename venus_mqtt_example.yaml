@@ -1,0 +1,16 @@
+# Example configuration for publishing Renogy sensor data to Venus OS MQTT.
+# Add this to your Home Assistant configuration.
+
+mqtt:
+  # Configure your MQTT broker here (host, username, password, etc.)
+  discovery: false
+
+mqtt_statestream:
+  base_topic: venusos
+  publish_attributes: true
+  publish_timestamps: true
+  include:
+    entities:
+      - sensor.renogy_battery_voltage
+      - sensor.renogy_battery_current
+      - sensor.renogy_pv_power

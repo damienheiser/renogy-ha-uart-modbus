@@ -1,8 +1,7 @@
-"""Support for Renogy BLE sensors."""
+"""Support for Renogy UART sensors."""
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
@@ -28,14 +27,13 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .ble import RenogyActiveBluetoothCoordinator, RenogyBLEDevice
+from .uart import RenogyActiveUARTCoordinator, RenogyUARTDevice
 from .const import (
     ATTR_MANUFACTURER,
     CONF_DEVICE_TYPE,
     DEFAULT_DEVICE_TYPE,
     DOMAIN,
     LOGGER,
-    RENOGY_BT_PREFIX,
 )
 
 # Registry of sensor keys
@@ -68,15 +66,15 @@ KEY_MAX_DISCHARGING_POWER_TODAY = "max_discharging_power_today"
 
 
 @dataclass
-class RenogyBLESensorDescription(SensorEntityDescription):
-    """Describes a Renogy BLE sensor."""
+class RenogySensorDescription(SensorEntityDescription):
+    """Describes a Renogy UART sensor."""
 
     # Function to extract value from the device's parsed data
     value_fn: Optional[Callable[[Dict[str, Any]], Any]] = None
 
 
-BATTERY_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
-    RenogyBLESensorDescription(
+BATTERY_SENSORS: tuple[RenogySensorDescription, ...] = (
+    RenogySensorDescription(
         key=KEY_BATTERY_VOLTAGE,
         name="Battery Voltage",
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
@@ -84,7 +82,7 @@ BATTERY_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get(KEY_BATTERY_VOLTAGE),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_BATTERY_CURRENT,
         name="Battery Current",
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
@@ -92,7 +90,7 @@ BATTERY_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get(KEY_BATTERY_CURRENT),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_BATTERY_PERCENTAGE,
         name="Battery Percentage",
         native_unit_of_measurement=PERCENTAGE,
@@ -100,7 +98,7 @@ BATTERY_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get(KEY_BATTERY_PERCENTAGE),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_BATTERY_TEMPERATURE,
         name="Battery Temperature",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
@@ -108,13 +106,13 @@ BATTERY_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get(KEY_BATTERY_TEMPERATURE),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_BATTERY_TYPE,
         name="Battery Type",
         device_class=None,
         value_fn=lambda data: data.get(KEY_BATTERY_TYPE),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_CHARGING_AMP_HOURS_TODAY,
         name="Charging Amp Hours Today",
         native_unit_of_measurement="Ah",
@@ -122,7 +120,7 @@ BATTERY_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         value_fn=lambda data: data.get(KEY_CHARGING_AMP_HOURS_TODAY),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_DISCHARGING_AMP_HOURS_TODAY,
         name="Discharging Amp Hours Today",
         native_unit_of_measurement="Ah",
@@ -130,7 +128,7 @@ BATTERY_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         value_fn=lambda data: data.get(KEY_DISCHARGING_AMP_HOURS_TODAY),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_CHARGING_STATUS,
         name="Charging Status",
         device_class=None,
@@ -138,8 +136,8 @@ BATTERY_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
     ),
 )
 
-PV_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
-    RenogyBLESensorDescription(
+PV_SENSORS: tuple[RenogySensorDescription, ...] = (
+    RenogySensorDescription(
         key=KEY_PV_VOLTAGE,
         name="PV Voltage",
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
@@ -147,7 +145,7 @@ PV_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get(KEY_PV_VOLTAGE),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_PV_CURRENT,
         name="PV Current",
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
@@ -155,7 +153,7 @@ PV_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get(KEY_PV_CURRENT),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_PV_POWER,
         name="PV Power",
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -163,7 +161,7 @@ PV_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get(KEY_PV_POWER),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_MAX_CHARGING_POWER_TODAY,
         name="Max Charging Power Today",
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -171,7 +169,7 @@ PV_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get(KEY_MAX_CHARGING_POWER_TODAY),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_POWER_GENERATION_TODAY,
         name="Power Generation Today",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
@@ -179,7 +177,7 @@ PV_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         value_fn=lambda data: data.get(KEY_POWER_GENERATION_TODAY),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_POWER_GENERATION_TOTAL,
         name="Power Generation Total",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -193,8 +191,8 @@ PV_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
     ),
 )
 
-LOAD_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
-    RenogyBLESensorDescription(
+LOAD_SENSORS: tuple[RenogySensorDescription, ...] = (
+    RenogySensorDescription(
         key=KEY_LOAD_VOLTAGE,
         name="Load Voltage",
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
@@ -202,7 +200,7 @@ LOAD_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get(KEY_LOAD_VOLTAGE),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_LOAD_CURRENT,
         name="Load Current",
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
@@ -210,7 +208,7 @@ LOAD_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get(KEY_LOAD_CURRENT),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_LOAD_POWER,
         name="Load Power",
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -218,13 +216,13 @@ LOAD_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get(KEY_LOAD_POWER),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_LOAD_STATUS,
         name="Load Status",
         device_class=None,
         value_fn=lambda data: data.get(KEY_LOAD_STATUS),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_POWER_CONSUMPTION_TODAY,
         name="Power Consumption Today",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
@@ -234,8 +232,8 @@ LOAD_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
     ),
 )
 
-CONTROLLER_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
-    RenogyBLESensorDescription(
+CONTROLLER_SENSORS: tuple[RenogySensorDescription, ...] = (
+    RenogySensorDescription(
         key=KEY_CONTROLLER_TEMPERATURE,
         name="Controller Temperature",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
@@ -243,21 +241,21 @@ CONTROLLER_SENSORS: tuple[RenogyBLESensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get(KEY_CONTROLLER_TEMPERATURE),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_DEVICE_ID,
         name="Device ID",
         device_class=None,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data: data.get(KEY_DEVICE_ID),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_MODEL,
         name="Model",
         device_class=None,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data: data.get(KEY_MODEL),
     ),
-    RenogyBLESensorDescription(
+    RenogySensorDescription(
         key=KEY_MAX_DISCHARGING_POWER_TODAY,
         name="Max Discharging Power Today",
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -276,70 +274,19 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Renogy BLE sensors."""
-    LOGGER.debug("Setting up Renogy BLE sensors for entry: %s", config_entry.entry_id)
-
-    renogy_data = hass.data[DOMAIN][config_entry.entry_id]
-    coordinator = renogy_data["coordinator"]
-
-    # Get device type from config
+    """Set up the Renogy UART sensors."""
+    coordinator: RenogyActiveUARTCoordinator = hass.data[DOMAIN][config_entry.entry_id]
     device_type = config_entry.data.get(CONF_DEVICE_TYPE, DEFAULT_DEVICE_TYPE)
-    LOGGER.debug("Setting up sensors for device type: %s", device_type)
-
-    # Try to wait for a real device name before creating entities
-    # This helps ensure entity IDs will match the real device name
-    if (
-        not coordinator.device
-        or coordinator.device.name.startswith("Unknown")
-        or not coordinator.device.name.startswith(RENOGY_BT_PREFIX)
-    ):
-        LOGGER.debug("Waiting for real device name before creating entities...")
-        # Force an immediate refresh to try getting device info
-        await coordinator.async_request_refresh()
-
-        # Wait for a short time to see if we can get the real device name
-        # We'll wait up to 10 seconds, checking every second
-        real_name_found = False
-        for _ in range(10):
-            await asyncio.sleep(1)
-            if coordinator.device and coordinator.device.name.startswith(
-                RENOGY_BT_PREFIX
-            ):
-                LOGGER.debug("Real device name found: %s", coordinator.device.name)
-                real_name_found = True
-                break
-
-        if not real_name_found:
-            LOGGER.debug(
-                "No real device name found after waiting. Using generic name for entities."
-            )
-
-    # Now create entities with the best name we have
-    if coordinator.device and (
-        coordinator.device.name.startswith(RENOGY_BT_PREFIX)
-        or not coordinator.device.name.startswith("Unknown")
-    ):
-        LOGGER.info("Creating entities with device name: %s", coordinator.device.name)
-        device_entities = create_device_entities(
-            coordinator, coordinator.device, device_type
-        )
-    else:
-        LOGGER.info("Creating entities with coordinator only (generic name)")
-        device_entities = create_coordinator_entities(coordinator, device_type)
-
-    # Add all entities to Home Assistant
-    if device_entities:
-        LOGGER.debug("Adding %s entities", len(device_entities))
-        async_add_entities(device_entities)
-    else:
-        LOGGER.warning("No entities were created")
+    entities = create_device_entities(coordinator, coordinator.device, device_type)
+    if entities:
+        async_add_entities(entities)
 
 
 def create_entities_helper(
-    coordinator: RenogyActiveBluetoothCoordinator,
-    device: Optional[RenogyBLEDevice],
+    coordinator: RenogyActiveUARTCoordinator,
+    device: Optional[RenogyUARTDevice],
     device_type: str = DEFAULT_DEVICE_TYPE,
-) -> List[RenogyBLESensor]:
+) -> List[RenogySensor]:
     """Create sensor entities with provided coordinator and optional device."""
     entities = []
 
@@ -351,7 +298,7 @@ def create_entities_helper(
         "Controller": CONTROLLER_SENSORS,
     }.items():
         for description in sensor_list:
-            sensor = RenogyBLESensor(
+            sensor = RenogySensor(
                 coordinator, device, description, category_name, device_type
             )
             entities.append(sensor)
@@ -360,9 +307,9 @@ def create_entities_helper(
 
 
 def create_coordinator_entities(
-    coordinator: RenogyActiveBluetoothCoordinator,
+    coordinator: RenogyActiveUARTCoordinator,
     device_type: str = DEFAULT_DEVICE_TYPE,
-) -> List[RenogyBLESensor]:
+) -> List[RenogySensor]:
     """Create sensor entities with just the coordinator (no device yet)."""
     entities = create_entities_helper(coordinator, None, device_type)
     LOGGER.info("Created %s entities with coordinator only", len(entities))
@@ -370,27 +317,27 @@ def create_coordinator_entities(
 
 
 def create_device_entities(
-    coordinator: RenogyActiveBluetoothCoordinator,
-    device: RenogyBLEDevice,
+    coordinator: RenogyActiveUARTCoordinator,
+    device: RenogyUARTDevice,
     device_type: str = DEFAULT_DEVICE_TYPE,
-) -> List[RenogyBLESensor]:
+) -> List[RenogySensor]:
     """Create sensor entities for a device."""
     entities = create_entities_helper(coordinator, device, device_type)
     LOGGER.info("Created %s entities for device %s", len(entities), device.name)
     return entities
 
 
-class RenogyBLESensor(CoordinatorEntity, SensorEntity):
-    """Representation of a Renogy BLE sensor."""
+class RenogySensor(CoordinatorEntity, SensorEntity):
+    """Representation of a Renogy UART sensor."""
 
-    entity_description: RenogyBLESensorDescription
-    coordinator: RenogyActiveBluetoothCoordinator
+    entity_description: RenogySensorDescription
+    coordinator: RenogyActiveUARTCoordinator
 
     def __init__(
         self,
-        coordinator: RenogyActiveBluetoothCoordinator,
-        device: Optional[RenogyBLEDevice],
-        description: RenogyBLESensorDescription,
+        coordinator: RenogyActiveUARTCoordinator,
+        device: Optional[RenogyUARTDevice],
+        description: RenogySensorDescription,
         category: str = None,
         device_type: str = DEFAULT_DEVICE_TYPE,
     ) -> None:
@@ -418,7 +365,7 @@ class RenogyBLESensor(CoordinatorEntity, SensorEntity):
                 name=device.name,
                 manufacturer=ATTR_MANUFACTURER,
                 model=device_model,
-                hw_version=f"BLE Address: {device.address}",
+                hw_version=f"Serial Port: {device.address}",
                 sw_version=device_type.capitalize(),  # Add device type as software version for clarity
             )
         else:
@@ -432,14 +379,14 @@ class RenogyBLESensor(CoordinatorEntity, SensorEntity):
                 name=f"Renogy {device_type.capitalize()}",
                 manufacturer=ATTR_MANUFACTURER,
                 model=device_model,
-                hw_version=f"BLE Address: {coordinator.address}",
+                hw_version=f"Serial Port: {coordinator.address}",
                 sw_version=device_type.capitalize(),  # Add device type as software version for clarity
             )
 
         self._last_updated = None
 
     @property
-    def device(self) -> Optional[RenogyBLEDevice]:
+    def device(self) -> Optional[RenogyUARTDevice]:
         """Get the current device - either stored or from coordinator."""
         if self._device:
             return self._device
@@ -466,7 +413,7 @@ class RenogyBLESensor(CoordinatorEntity, SensorEntity):
                 name=self._device.name,
                 manufacturer=ATTR_MANUFACTURER,
                 model=device_model,
-                hw_version=f"BLE Address: {self._device.address}",
+                hw_version=f"Serial Port: {self._device.address}",
                 sw_version=self._device_type.capitalize(),  # Add device type as software version
             )
             LOGGER.debug("Updated device info with real name: %s", self._device.name)
