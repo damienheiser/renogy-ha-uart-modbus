@@ -1,8 +1,6 @@
-"""Integration tests for the Renogy BLE integration without dependencies."""
-
-from unittest.mock import MagicMock
 
 import pytest
+from unittest.mock import MagicMock
 
 # Define constants locally to avoid importing from the actual module
 DOMAIN = "renogy"
@@ -10,22 +8,11 @@ CONF_SCAN_INTERVAL = "scan_interval"
 
 
 @pytest.fixture
-def mock_ble_device():
-    """Create a mock BLE device."""
-    device = MagicMock()
-    device.address = "AA:BB:CC:DD:EE:FF"
-    device.name = "BT-TH-12345"
-    device.rssi = -60
-    return device
-
-
-@pytest.fixture
 def mock_renogy_device():
-    """Create a mock Renogy BLE device with parsed data."""
+    """Create a mock Renogy UART device with parsed data."""
     device = MagicMock()
-    device.address = "AA:BB:CC:DD:EE:FF"
-    device.name = "BT-TH-12345"
-    device.rssi = -60
+    device.address = "/dev/ttyUSB0"
+    device.name = "/dev/ttyUSB0"
     device.available = True
     device.is_available = True
     device.parsed_data = {
@@ -65,11 +52,10 @@ def mock_coordinator():
     coordinator = MagicMock()
     coordinator.data = {}
     coordinator.device = None
-    coordinator.address = "AA:BB:CC:DD:EE:FF"
+    coordinator.address = "/dev/ttyUSB0"
     coordinator.last_update_success = True
     coordinator.async_request_refresh = MagicMock()
     coordinator.async_start = MagicMock(return_value=lambda: None)
-    # Add a _listeners array that coordinator implementations typically have
     coordinator._listeners = []
     return coordinator
 
@@ -84,16 +70,13 @@ def mock_hass():
 
 def test_device_discovery_and_data(mock_coordinator, mock_renogy_device):
     """Test device discovery and data processing."""
-    # Set up the coordinator with our mock device
     mock_coordinator.device = mock_renogy_device
     mock_coordinator.data = mock_renogy_device.parsed_data
 
-    # Verify device data
-    assert mock_coordinator.device.name == "BT-TH-12345"
-    assert mock_coordinator.device.address == "AA:BB:CC:DD:EE:FF"
+    assert mock_coordinator.device.name == "/dev/ttyUSB0"
+    assert mock_coordinator.device.address == "/dev/ttyUSB0"
     assert mock_coordinator.device.available is True
 
-    # Verify parsed data
     assert mock_coordinator.data["battery_voltage"] == 12.8
     assert mock_coordinator.data["pv_power"] == 42.55
     assert mock_coordinator.data["model"] == "Rover 40A"
@@ -101,56 +84,42 @@ def test_device_discovery_and_data(mock_coordinator, mock_renogy_device):
 
 def test_coordinator_device_interaction(mock_coordinator, mock_renogy_device):
     """Test coordinator behavior with device."""
-    # Set up coordinator with mock device
     mock_coordinator.device = mock_renogy_device
     mock_coordinator.data = mock_renogy_device.parsed_data
 
-    # Add a callback function that will update the device
     def update_callback():
         mock_renogy_device.update_availability(True, None)
 
-    # Register the callback with the coordinator
     mock_coordinator._listeners.append(update_callback)
 
-    # Test device availability propagation
     mock_renogy_device.is_available = False
     assert not mock_renogy_device.is_available
 
-    # Test coordinator successful data refresh
     mock_coordinator.last_update_success = True
 
-    # Simulate calling callback from BT update
     for callback in mock_coordinator._listeners:
         callback()
 
-    # Device update was used to update data
     mock_renogy_device.update_availability.assert_called_with(True, None)
 
 
 def test_malformed_data_handling(mock_coordinator, mock_renogy_device):
     """Test handling of malformed data from the device."""
-    # Set up coordinator with mock device
     mock_coordinator.device = mock_renogy_device
 
-    # Save the original good data
     good_data = dict(mock_renogy_device.parsed_data)
 
-    # Test cases for different malformed data scenarios
     test_cases = [
-        {},  # Empty data
-        {"battery_voltage": None},  # None value
-        {"battery_voltage": "invalid"},  # Wrong type
-        {"unknown_field": 123},  # Unknown field
+        {},
+        {"battery_voltage": None},
+        {"battery_voltage": "invalid"},
+        {"unknown_field": 123},
     ]
 
     for test_data in test_cases:
-        # Update device with bad data
         mock_renogy_device.parsed_data = test_data
         mock_coordinator.data = test_data
-
-        # Device should remain available despite bad data
         assert mock_renogy_device.available is True
 
-    # Restore good data
     mock_renogy_device.parsed_data = good_data
     mock_coordinator.data = good_data
